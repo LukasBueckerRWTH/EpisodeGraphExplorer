@@ -3,7 +3,7 @@ Standalone Python Application allowing for exploration of Episodes
 
 ## Table of Contents
 - [EpisodeGraphExplorer](#Episode-Graph-Explorer)
-    - [Install](#install)
+    - [Installation](#install)
     - [Required data](#required-data)
     - [Usage](#usage)
     - [Test data](#test-data)

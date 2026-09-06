@@ -1,4 +1,3 @@
-import time
 import os
 import pm4py
 import sys
@@ -462,7 +461,6 @@ class SubEpisodes(QThread):
         return self.episodes
 
     def run(self):
-        start = time.perf_counter()
         try:
             subeps = self.findSubEpisodes()
             ret = self.handleSubEpisodes(subeps)
@@ -470,8 +468,6 @@ class SubEpisodes(QThread):
             import traceback
             traceback.print_exc()
             ret = []
-        end = time.perf_counter()
-        print(f"Runtime: {end - start:.3f} seconds - SubEpisodes")
         self.result.emit(ret)
     def stop(self):
         pass
@@ -561,7 +557,6 @@ class Reorder(QThread):
         return self.episodes
 
     def run(self):
-        start = time.perf_counter()
         try:
             candidates = self.findReorderCandidates()
             ret = self.handleReorderCandidates(candidates)
@@ -569,8 +564,6 @@ class Reorder(QThread):
             import traceback
             traceback.print_exc()
             ret = []
-        end = time.perf_counter()
-        print(f"Runtime: {end - start:.3f} seconds - Reorder")
         self.result.emit(ret)
 
     def stop(self):
@@ -686,7 +679,6 @@ class SingleDiff(QThread):
         return self.occurrence_sets
 
     def run(self):
-        start = time.perf_counter()
         try:
             ret = self.findSingleDiff()
         except Exception:
@@ -695,8 +687,6 @@ class SingleDiff(QThread):
                   "pipeline doesn't stall. Traceback:")
             traceback.print_exc()
             ret = []
-        end = time.perf_counter()
-        print(f"Runtime: {end - start:.3f} seconds - Choice/Update")
         self.result.emit(ret)
 
     def stop(self):
@@ -1209,7 +1199,6 @@ def main():
     app.setStyleSheet(build_stylesheet(detect_theme()))
     rel = Relater()
     def startRelater():
-        start = time.perf_counter()
         global XES_LOCATION
         global EPS
         global EPSFILE
@@ -1222,8 +1211,6 @@ def main():
             else:
                 con = Converter(EPSFILE)
                 EPS = con.run()
-        end = time.perf_counter()
-        print(f"Runtime: {end - start:.3f} seconds")
         
         viz = EpisodeVisualizer()
         def updateViz(value):
@@ -1246,7 +1233,6 @@ def main():
         def onRelaterProgress(completed, total):
             inputwindow.set_progress_value(completed, total)
 
-        start = time.perf_counter()
         rel.resultReady.connect(updateViz)
         rel.progress.connect(onRelaterProgress)
 
