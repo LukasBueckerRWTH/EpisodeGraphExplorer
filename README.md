@@ -27,4 +27,4 @@ python EpisodeGraphExplorer.py
 ```
 
 ## Test data
-We provide three event logs ([Process Discovery Challenge 2025](https://doi.org/10.4121/7212a73a-1eac-4a08-8c01-973dca020822),[Sepsis Cases - Event Log](https://doi.org/10.4121/uuid:915d2bfb-7e84-49ad-a286-dc35f063a460) and a custom event log) with some episode files.
+We provide two publicly available event logs ([Process Discovery Challenge 2025](https://doi.org/10.4121/7212a73a-1eac-4a08-8c01-973dca020822), [Sepsis Cases - Event Log](https://doi.org/10.4121/uuid:915d2bfb-7e84-49ad-a286-dc35f063a460)) and a custom event log with some episode files.
