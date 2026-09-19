@@ -73,7 +73,8 @@ class ProbabilisticDependency(QThread):
         keyed = []
         for ep in episodes:
             key = (tuple(ep[0]), tuple(sorted(ep[1])))
-            keyed.append((ep, occ_sets.get(key, set())))
+            occ_list = occ_sets.get(key, [])
+            keyed.append((ep, {t[0] for t in occ_list}))
 
         results = []
 
@@ -212,7 +213,8 @@ class AbsoluteConnection(QThread):
         keyed = []
         for ep in episodes:
             key = (tuple(ep[0]), tuple(sorted(ep[1])))
-            keyed.append((ep, occ_sets.get(key, set())))
+            occ_list = occ_sets.get(key, [])
+            keyed.append((ep, {t[0] for t in occ_list}))
 
 
         results = []
@@ -283,7 +285,8 @@ class AbsoluteExclusion(QThread):
         keyed = []
         for ep in episodes:
             key = (tuple(ep[0]), tuple(sorted(ep[1])))
-            keyed.append((ep, occ_sets.get(key, set())))
+            occ_list = occ_sets.get(key, [])
+            keyed.append((ep, {t[0] for t in occ_list}))
 
 
         results = []
@@ -314,6 +317,7 @@ class Subsume(QThread):
     log = None
     episodes = None
     freq = None
+    occurrence_sets = {}
     result = pyqtSignal(object)
     def setFrequencies(self,freq):
         self.freq = freq
@@ -327,6 +331,10 @@ class Subsume(QThread):
         self.episodes = episodes
     def getEpisodes(self):
         return self.episodes
+    def setOccurrenceSets(self, occ):
+        self.occurrence_sets = occ
+    def getOccurrenceSets(self):
+        return self.occurrence_sets
     
     def run(self):
         try:
@@ -379,32 +387,43 @@ class Subsume(QThread):
             frozenset(episode_transitions)
         )
 
+    def build_occurrence_map(self, episode):
+        activities, transitions = episode
+        key = (tuple(activities), tuple(sorted(transitions)))
+        occ_list = self.occurrence_sets.get(key, [])
+        return {case_id: dict(zip(activities, positions)) for case_id, positions in occ_list}
+
+    def resolveSubsume(self, ep_strict, ep_loose):
+        ep_freqs = self.getFrequencies()
+        strict_key = self.episode_to_key(ep_strict[0], ep_strict[1])
+        loose_key = self.episode_to_key(ep_loose[0], ep_loose[1])
+        freq_strict = ep_freqs.get(strict_key, 0)
+        freq_loose = ep_freqs.get(loose_key, 0)
+        if freq_loose > freq_strict:
+            return ([ep_loose], [ep_strict], freq_strict, freq_loose)
+        return ([ep_strict], [ep_loose], freq_loose, freq_strict)
+
     def findSubsumes(self):
         episodes = self.getEpisodes()
         toSubsume = []
 
         precomputed = []
         for ep in episodes:
-            _, transitions = ep
+            activities, transitions = ep
             graph, _, nodes = self.build_graph(transitions)
-            if not nodes:
-                precomputed.append((ep, frozenset(), None))
-                continue
-            closure = self._transitive_closure(graph, nodes)
-            precomputed.append((ep, frozenset(nodes), closure))
+            closure = self._transitive_closure(graph, nodes) if nodes else set()
+            precomputed.append((ep, frozenset(activities), closure))
 
-        for i, (ep_x, nodes_x, cl_x) in enumerate(precomputed):
-            if cl_x is None:
-                continue
-            for j, (ep_y, nodes_y, cl_y) in enumerate(precomputed):
+        for i, (ep_x, acts_x, cl_x) in enumerate(precomputed):
+            for j, (ep_y, acts_y, cl_y) in enumerate(precomputed):
                 if i == j or episodes[i] == episodes[j]:
                     continue
-                if cl_y is None:
+                if acts_x != acts_y:
                     continue
-                if nodes_x != nodes_y:
+                if cl_x == cl_y:
                     continue
                 if cl_y <= cl_x:
-                    toSubsume.append(([episodes[i]], [episodes[j]]))
+                    toSubsume.append(self.resolveSubsume(ep_x, ep_y))
 
         return toSubsume
     
@@ -424,17 +443,14 @@ class Subsume(QThread):
             f_1s = (f_1 + alpha)/logsize
             f_2s = (f_2 + alpha)/logsize
             return f_1s / f_2s
-        ep_freqs = self.getFrequencies()
         logsize = self.get_log_size()
         seen = set()
-        for subsume in subsumes:
-            for ep1 in subsume[0]:
+        for dominant, minor, freq_minor, freq_dominant in subsumes:
+            for ep1 in dominant:
                 ep1key = self.episode_to_key(ep1[0],ep1[1])
-                freq_ep1 = ep_freqs.get(ep1key,0)
-                for ep2 in subsume[1]:
+                for ep2 in minor:
                     ep2key = self.episode_to_key(ep2[0],ep2[1])
-                    freq_ep2 = ep_freqs.get(ep2key,0)
-                    tau = calc_tau_smooth_norm(freq_ep1,freq_ep2,logsize)
+                    tau = calc_tau_smooth_norm(freq_minor,freq_dominant,logsize)
                     pair = (ep1key, ep2key)
                     if pair not in seen:
                         seen.add(pair)
@@ -921,6 +937,7 @@ class Relater(QThread):
         self.AbsCon.setOccurrenceSets(self.getOccurrenceSets())
         self.AbsEx.setOccurrenceSets(self.getOccurrenceSets())
         self.SiDiff.setOccurrenceSets(self.getOccurrenceSets())
+        self.SubSu.setOccurrenceSets(self.getOccurrenceSets())
 
         self.probDep.start()
         self.structured.start()
@@ -946,7 +963,7 @@ class Relater(QThread):
         episode_frequencies = {}
         for episode_activities, episode_transitions in episodes:
             occ_key = (tuple(episode_activities), tuple(sorted(episode_transitions)))
-            occ_set = occurrence_sets.get(occ_key, set())
+            occ_set = occurrence_sets.get(occ_key, [])
 
             freq_key = (
                 frozenset(episode_activities),
@@ -1123,9 +1140,10 @@ def preProcessEPS(episodes, log_df):
 
         window_size = len(activities) + 1
         n = len(trace)
+        effective_window_size = min(window_size, n)
 
-        for start in range(0, n - window_size + 1):
-            window = trace[start:start + window_size]
+        for start in range(0, n - effective_window_size + 1):
+            window = trace[start:start + effective_window_size]
             positions = {
                 act: [i for i, x in enumerate(window) if x == act]
                 for act in activity_set
@@ -1145,9 +1163,9 @@ def preProcessEPS(episodes, log_df):
                         break
 
                 if valid:
-                    return True
+                    return [start + assignment[a] for a in activities]
 
-        return False
+        return None
 
     traces = (
         log_df.sort_index()
@@ -1172,10 +1190,11 @@ def preProcessEPS(episodes, log_df):
 
         ep = (activities, transitions)
 
-        occ = set()
+        occ = []
         for case_id, trace in traces.items():
-            if episode_in_trace(trace, ep):
-                occ.add(case_id)
+            positions = episode_in_trace(trace, ep)
+            if positions is not None:
+                occ.append((case_id, positions))
 
         filtered.append(ep)
         occurrence_sets[(tuple(activities), tuple(sorted(transitions)))] = occ

@@ -257,6 +257,15 @@ class EpisodeVisualizer(QWidget):
     
     def set_occurrence_sets(self, occ_sets):
         self.occurrence_sets = occ_sets
+
+    def _occurrence_case_ids(self, occ):
+        ids = set()
+        for item in occ:
+            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], list):
+                ids.add(item[0])
+            else:
+                ids.add(item)
+        return ids
     
     def set_total_traces(self,total_traces):
         self.total_traces = total_traces
@@ -1530,7 +1539,7 @@ class EpisodeVisualizer(QWidget):
                 occ_set = self.occurrence_sets.get(old_key)
                 if occ_set:
                     has_any_occurrence_data = True
-                    union_occurrences |= set(occ_set)
+                    union_occurrences |= self._occurrence_case_ids(occ_set)
 
             if has_any_occurrence_data:
                 self.occurrence_sets[new_key] = union_occurrences
@@ -1822,7 +1831,7 @@ class EpisodeVisualizer(QWidget):
             occ = self.occurrence_sets.get(key)
             if not occ:
                 return set()
-            occurrence_sets.append(set(occ))
+            occurrence_sets.append(self._occurrence_case_ids(occ))
 
         if not occurrence_sets:
             return set()
