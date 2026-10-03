@@ -138,6 +138,7 @@ class EpisodeVisualizer(QWidget):
         self.manual_episode_positions = {}
 
         self._group_moving = False
+        self._laying_out = False                        
         self.relation_update_timer = QTimer()
         self.relation_update_timer.setSingleShot(True)
         self.relation_update_timer.timeout.connect(self._deferred_scene_update)
@@ -413,13 +414,19 @@ class EpisodeVisualizer(QWidget):
     def _layout_episodes(self, episode_items):
         if not episode_items:
             return
+        pinned_items = []
         new_items = []
-        for item in episode_items:
-            key = self._episode_key(item.raw_data_org)
-            if key in self.manual_episode_positions:
-                item.setPos(self.manual_episode_positions[key])
-            else:
-                new_items.append(item)
+        self._laying_out = True
+        try:
+            for item in episode_items:
+                key = self._episode_key(item.raw_data_org)
+                if key in self.manual_episode_positions:
+                    item.setPos(self.manual_episode_positions[key])
+                    pinned_items.append(item)
+                else:
+                    new_items.append(item)
+        finally:
+            self._laying_out = False
         if new_items:
             if len(new_items) >= self.LARGE_EPISODE_COUNT_THRESHOLD:
                 self.performance_warning_label.setText(f"Laying out {len(new_items)} episodes. This can take a while and the window may look unresponsive until it finishes.")
@@ -428,7 +435,12 @@ class EpisodeVisualizer(QWidget):
                 print(f"{len(new_items)} episodes to lay out (>= {self.LARGE_EPISODE_COUNT_THRESHOLD}) - the force layout is O(iterations * n^2) and runs on the UI thread, so this will block the window for a while.")
             else:
                 self.performance_warning_label.hide()
-            self.episode_layout.layout(self, new_items)
+            #All episodes take part in the simulation; manually placed ones stay fixed
+            self._laying_out = True
+            try:
+                self.episode_layout.layout(self, episode_items, fixed_items=pinned_items)
+            finally:
+                self._laying_out = False
             self.performance_warning_label.hide()
         self._update_scene_rect()
 
@@ -1694,6 +1706,8 @@ class EpisodeVisualizer(QWidget):
         self._fit_view_to_content()
         
     def _store_episode_position(self, episode_item):
+        if self._laying_out:
+            return          
         key = self._episode_key(episode_item.raw_data_org)
         self.manual_episode_positions[key] = episode_item.pos()
         self.relation_update_timer.start(16)
@@ -1788,7 +1802,7 @@ class EpisodeVisualizer(QWidget):
         print("=" * 70)
 
     def move_selected_group(self, moved_item, delta):
-        if self._group_moving:
+        if self._group_moving or self._laying_out:
             return
 
         moved_key = self._episode_key(moved_item.raw_data_org)
