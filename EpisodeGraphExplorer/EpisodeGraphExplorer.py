@@ -393,16 +393,6 @@ class Subsume(QThread):
         occ_list = self.occurrence_sets.get(key, [])
         return {case_id: dict(zip(activities, positions)) for case_id, positions in occ_list}
 
-    def resolveSubsume(self, ep_strict, ep_loose):
-        ep_freqs = self.getFrequencies()
-        strict_key = self.episode_to_key(ep_strict[0], ep_strict[1])
-        loose_key = self.episode_to_key(ep_loose[0], ep_loose[1])
-        freq_strict = ep_freqs.get(strict_key, 0)
-        freq_loose = ep_freqs.get(loose_key, 0)
-        if freq_loose > freq_strict:
-            return ([ep_loose], [ep_strict], freq_strict, freq_loose)
-        return ([ep_strict], [ep_loose], freq_loose, freq_strict)
-
     def findSubsumes(self):
         episodes = self.getEpisodes()
         toSubsume = []
@@ -423,7 +413,7 @@ class Subsume(QThread):
                 if cl_x == cl_y:
                     continue
                 if cl_y <= cl_x:
-                    toSubsume.append(self.resolveSubsume(ep_x, ep_y))
+                    toSubsume.append((ep_x, ep_y))
 
         return toSubsume
     
@@ -433,28 +423,23 @@ class Subsume(QThread):
     
     def handleSubsumes(self, subsumes):
         ret = []
-        def calc_tau(f_1,f_2):
-            return f_1/f_2
-        def calc_tau_smooth(f_1,f_2,alpha=1.0):
-            f_1s = f_1 + alpha
-            f_2s = f_2 + alpha
-            return f_1s / f_2s
         def calc_tau_smooth_norm(f_1,f_2,logsize,alpha=0.0000000001):
             f_1s = (f_1 + alpha)/logsize
             f_2s = (f_2 + alpha)/logsize
             return f_1s / f_2s
+        ep_freqs = self.getFrequencies()
         logsize = self.get_log_size()
         seen = set()
-        for dominant, minor, freq_minor, freq_dominant in subsumes:
-            for ep1 in dominant:
-                ep1key = self.episode_to_key(ep1[0],ep1[1])
-                for ep2 in minor:
-                    ep2key = self.episode_to_key(ep2[0],ep2[1])
-                    tau = calc_tau_smooth_norm(freq_minor,freq_dominant,logsize)
-                    pair = (ep1key, ep2key)
-                    if pair not in seen:
-                        seen.add(pair)
-                        ret.append(("SUBSUME",ep1,ep2,round(clamp01(tau),3)))
+        for ep_strict, ep_loose in subsumes:
+            strict_key = self.episode_to_key(ep_strict[0], ep_strict[1])
+            loose_key = self.episode_to_key(ep_loose[0], ep_loose[1])
+            freq_strict = ep_freqs.get(strict_key, 0)
+            freq_loose = ep_freqs.get(loose_key, 0)
+            tau = calc_tau_smooth_norm(freq_strict, freq_loose, logsize)
+            pair = (strict_key, loose_key)
+            if pair not in seen:
+                seen.add(pair)
+                ret.append(("SUBSUME",ep_strict,ep_loose,round(clamp01(tau),3)))
         return ret
 
 class SubEpisodes(QThread):
