@@ -487,7 +487,7 @@ class EpisodeVisualizer(QWidget):
                 continue
             widget.deleteLater()
 
-        title = QLabel("Activity Relations")
+        title = QLabel("Behavioral Relations")
         title.setObjectName("panelTitle")
         title.setWordWrap(True)
         self.left_layout.addWidget(title)
